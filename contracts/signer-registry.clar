@@ -1,11 +1,8 @@
 
-;; title: signer-registry
+;; title: SignerGateway - sBTC Signer Registry Contract
 ;; version:
 ;; summary:
-;; description:
-
-;; SignerGateway MVP - sBTC Signer Registry Contract
-;; Simple registry for institutions to register as potential sBTC signers
+;; description: Registry for institutions to register as potential sBTC signers
 
 ;; Error constants
 (define-constant ERR-NOT-AUTHORIZED (err u401))
@@ -156,11 +153,43 @@
 
 ;; Read-only function: Get signers by verification status
 (define-read-only (get-signers-by-status (status (string-ascii 20)))
-  (ok (filter check-status (var-get signer-addresses)))
+  (ok (fold check-status-fold (var-get signer-addresses) { status: status, result: (list) }))
 )
 
-;; Helper function for filtering by status
-(define-private (check-status (signer-address principal))
+;; Helper function for filtering by status using fold
+(define-private (check-status-fold (signer-address principal) (acc { status: (string-ascii 20), result: (list 1000 principal) }))
+  (let ((target-status (get status acc))
+        (current-result (get result acc)))
+    (match (map-get? signers signer-address)
+      some-signer 
+        (if (is-eq (get verification-status some-signer) target-status)
+          { status: target-status, result: (unwrap-panic (as-max-len? (append current-result signer-address) u1000)) }
+          acc)
+      acc
+    )
+  )
+)
+
+;; Read-only function: Get active signers count
+(define-read-only (get-active-signers-count)
+  (len (filter is-active-signer (var-get signer-addresses)))
+)
+
+;; Helper function to check if signer is active
+(define-private (is-active-signer (signer-address principal))
+  (match (map-get? signers signer-address)
+    some-signer (get is-active some-signer)
+    false
+  )
+)
+
+;; Read-only function: Get verified signers count
+(define-read-only (get-verified-signers-count)
+  (len (filter is-verified-signer (var-get signer-addresses)))
+)
+
+;; Helper function to check if signer is verified
+(define-private (is-verified-signer (signer-address principal))
   (match (map-get? signers signer-address)
     some-signer (is-eq (get verification-status some-signer) "verified")
     false
